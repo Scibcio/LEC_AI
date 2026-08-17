@@ -9,7 +9,7 @@ PRICE_SPREAD_THRESHOLD = 0.01    # relative spread that counts as real price div
 
 # whichever source declares the highest qty authority is the physical-stock reference,
 # looked up by value so this isn't hardcoded to "wms" by name (N-source safe)
-_QTY_REFERENCE = max(SOURCES, key=lambda s: s["domain_authority"].get("qty", 0))["name"]
+_REFERENCE = max(SOURCES, key=lambda s: s["domain_authority"].get("qty", 0))["name"]
 
 
 def _group_by_sku(records):
@@ -26,7 +26,7 @@ def detect_coverage_gaps(records):
     output at all -- the most expensive alarm in an inventory system, muted."""
     conflicts = []
     for sku, claims in _group_by_sku(records).items():
-        reference = next((r for r in claims if r.source == _QTY_REFERENCE), None)
+        reference = next((r for r in claims if r.source == _REFERENCE), None)
         if reference is not None and reference.qty is not None:
             continue  # reference covers this sku; ordinary stock comparison applies
         if not any(r.qty is not None for r in claims):
@@ -38,12 +38,12 @@ def detect_coverage_gaps(records):
 def detect_stock_mismatches(records):
     conflicts = []
     for sku, claims in _group_by_sku(records).items():
-        reference = next((r for r in claims if r.source == _QTY_REFERENCE), None)
+        reference = next((r for r in claims if r.source == _REFERENCE), None)
         if reference is None or reference.qty is None:
             continue  # no reference to compare against -- detect_coverage_gaps owns this case
         flagged = False
         for r in claims:
-            if r.source == _QTY_REFERENCE or r.qty is None:
+            if r.source == _REFERENCE or r.qty is None:
                 continue
             if r.reserved is not None:
                 # sell-through source: credit reservations first, then any amount

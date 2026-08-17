@@ -66,9 +66,11 @@ for a (sku, field) — works for any N sources, not just 3.
   its last sync happened after the winning value changed and it still
   shows the old price — a real propagation failure, not lag.
 
-**Ranking:** `priority = severity * confidence * urgency`. Below-threshold
-confidence → the action becomes ESCALATE_HUMAN, a real ranked output with its
-own reasoning, not a fallback.
+**Ranking:** `priority = severity * urgency`, damped by confidence within
+[0.5, 1.0]. This prevents high-severity uncertain items from being buried by
+multiplying raw confidence. Below-threshold confidence → ESCALATE_HUMAN. A
+conflict that persists unresolved escalates only if confidence is also below
+a persistence threshold, not merely for age alone.
 
 **State (state.json):** conflict fingerprints (hash of sku+type only, not the
 values, so drift doesn't look "new") with first_seen/last_seen/ticks_seen, and
@@ -76,9 +78,11 @@ per-source-per-field reliability (mirrors domain_authority's shape, since a
 source can be good at qty but bad at price). No separate confidence-threshold
 store: reliability alone is the adaptation mechanism — it feeds back into the
 same trust formula, so a chronically-wrong source needs a bigger edge to win
-next time. Updated only on ERROR resolutions; LAG isn't evidence anyone was
-wrong. Decays back toward neutral (0.5) every tick so a source punished once
-doesn't stay punished forever.
+next time. Updated in batches (all of one tick's resolutions at once) only on
+ERROR resolutions where an independent second source corroborates the winner
+— a strong proxy for correctness without an external truth signal. Decays back
+toward neutral (0.5) every tick so a source punished once doesn't stay
+punished forever.
 
 **N-source design:** SOURCES is a registry list (`name, loader, authority
 map, staleness window`), not named variables. Detectors/resolver operate on
@@ -112,8 +116,8 @@ one.
 
 ### Phase 5 - state and learning
 - [x] Load/save state.json, fingerprint suppression
-- [x] Escalate if unresolved across N ticks
-- [x] Reliability update, threshold adaptation, decay to neutral
+- [x] Escalate on ambiguity (low confidence) or persistence (age + low confidence)
+- [x] Batched, corroborated reliability update; decay to neutral
 
 ### Phase 6 - runner
 - [x] --once, --loop N, --explain SKU, --reset

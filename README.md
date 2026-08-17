@@ -59,10 +59,10 @@ ranked very differently:
 - **SKU-130** — shop offers 42 units for sale; WMS and supplier agree only
   ~8-12 physically exist. Active overselling: a customer could complete a
   checkout for stock that isn't there, breaking an order already accepted.
-  Ranked `RESTOCK`, priority 0.93 — the highest in the dataset.
+  Ranked `RESTOCK`, priority 2.47 — the highest in the dataset.
 - **SKU-140** — shop shows 95 available; WMS and supplier agree on ~150.
   Shop is *under*-advertising real stock. No accepted order is at risk,
-  worst case is a few missed sales. Ranked `ALERT`, priority 0.17 — about
+  worst case is a few missed sales. Ranked `ALERT`, priority 0.45 — about
   5x lower.
 
 Same detector, same resolved truth, deliberately opposite severity —
@@ -99,3 +99,5 @@ agent actually produces (`python -m agent.runner --once` reproduces this
 exact table against `data/*.json`). Priority numbers quoted in the worked
 example assume fresh state (before learning drift); run `python -m
 agent.runner --reset && python -m agent.runner --once` to match them.
+Priorities below are from a fresh run — they rise ~8% over the first dozen
+ticks as reliability settles, then hold.

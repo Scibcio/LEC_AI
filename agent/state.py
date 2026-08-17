@@ -1,12 +1,4 @@
-"""
-Persisted state across ticks: which conflicts have already been seen (so a
-drifting-but-ongoing conflict doesn't look new) and per-source-per-field
-reliability, learned from which claims won/lost past resolutions. This is
-the sole mechanism behind "confidence thresholds adapt" (PLAN.md 4.4) —
-reliability feeds back into the same trust formula from trust.py, so a
-chronically-wrong source needs a bigger edge to win next time. No separate
-threshold store is needed.
-"""
+"""State persisted across ticks: conflict tracking and learned reliability."""
 
 import json
 import os
@@ -86,7 +78,7 @@ def record_conflict(state, conflict, now):
     return entry
 
 
-def _agrees_with_winner(conflict, claim, winner):
+def _agrees(conflict, claim, winner):
     field = field_for(conflict)
     winner_value, claim_value = getattr(winner, field), getattr(claim, field)
     if winner_value is None or claim_value is None:
@@ -99,36 +91,19 @@ def _agrees_with_winner(conflict, claim, winner):
 
 
 def update_reliability(state, resolutions):
-    """Move reliability scores from one tick's resolutions, as a batch.
-
-    Two guards, both of which the naive version lacked.
-
-    *Corroboration.* The winner is chosen by the trust formula, so treating
-    "won" as "was right" scores each source against the agent's own prior
-    belief: a source the formula already favours gets promoted, which makes
-    the formula favour it more. An independent second source agreeing with the
-    winner is evidence the formula did not manufacture; without one, the tick
-    teaches nothing and we decline to learn from it. Real ground truth -- a
-    human confirming, or a physical count -- would replace this test.
-    Corroboration is the strongest proxy available with no feedback channel.
-
-    *Batching.* Scoring per conflict let a source wrong on three SKUs move 3x
-    the learning rate in a single tick, which no decay rate can answer. Each
-    source-field instead accumulates its wins and losses across the whole tick
-    and moves once, by at most RELIABILITY_LEARNING_RATE. That keeps the
-    learning/decay equilibrium the rates were chosen for, and makes "wrong
-    about most things" score differently from "wrong about one thing a lot"."""
+    """Update reliability from all tick's resolutions, batched by source-field."""
+    # only learn when an independent second source corroborates the winner
     tally = {}  # (source, field) -> [wins, losses]
     for conflict, winner, verdict in resolutions:
         if verdict != "error":
             continue  # lag isn't evidence anyone was wrong
         field = field_for(conflict)
         others = [c for c in conflict.claims if c is not winner and getattr(c, field) is not None]
-        if not any(_agrees_with_winner(conflict, c, winner) for c in others):
+        if not any(_agrees(conflict, c, winner) for c in others):
             continue  # winner stands alone: the formula's own opinion, not evidence
         tally.setdefault((winner.source, field), [0, 0])[0] += 1
         for c in others:
-            if _agrees_with_winner(conflict, c, winner):
+            if _agrees(conflict, c, winner):
                 continue  # this claim actually matched the resolved truth -- not evidence it was wrong
             tally.setdefault((c.source, field), [0, 0])[1] += 1
 

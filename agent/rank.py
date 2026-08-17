@@ -17,19 +17,19 @@ PRICE_ADJUST = "PRICE_ADJUST"
 ALERT = "ALERT"
 ESCALATE_HUMAN = "ESCALATE_HUMAN"
 
-LOW_STOCK_THRESHOLD = 15      # units; below this the resolved truth itself needs reordering
-CONFIDENCE_THRESHOLD = 0.15   # relative margin below which the agent escalates instead of guessing
-PERSISTENCE_CONFIDENCE = 0.30 # a conflict this unconfident, still unresolved after N ticks, escalates
-MAGNITUDE_REFERENCE = 1000    # dollars; exposure at/above this maxes out the severity bump
-CONFIDENCE_FLOOR = 0.5        # least a low-confidence item's priority can be scaled by (see _priority)
-TIE_BAND = 0.05               # priorities within this relative distance are reported as comparable
+LOW_STOCK_THRESHOLD = 15
+CONFIDENCE_THRESHOLD = 0.15
+PERSISTENCE_CONFIDENCE = 0.30
+MAX_EXPOSURE = 1000
+CONFIDENCE_FLOOR = 0.5
+TIE_BAND = 0.05
 
 # category ordering matches PLAN.md 4.3: coverage > overselling > price > underselling, plus
 # "internal" for conflicts where the customer already sees the correct number and only a backend
 # source disagrees (e.g. a stale supplier feed) — real, but nobody's actually affected yet
-SEVERITY_BASE = {"coverage": 3.5, "overselling": 3.0, "price": 2.0, "underselling": 1.0, "internal": 0.5}
-URGENCY_BASE = {"coverage": 1.0, "overselling": 0.8, "price": 0.6, "underselling": 0.5, "internal": 0.3}
-CATEGORY_PHRASE = {
+SEVERITY = {"coverage": 3.5, "overselling": 3.0, "price": 2.0, "underselling": 1.0, "internal": 0.5}
+URGENCY = {"coverage": 1.0, "overselling": 0.8, "price": 0.6, "underselling": 0.5, "internal": 0.3}
+PHRASES = {
     "coverage": "the reference stock system has no record of a sku other sources are reporting — the trusted count doesn't exist",
     "overselling": "the storefront offers more than physically exists — active oversell risk",
     "underselling": "the storefront under-advertises real stock — lost sales, no broken orders",
@@ -37,18 +37,18 @@ CATEGORY_PHRASE = {
     "internal": "the customer-facing number is already correct — only a backend source disagrees",
 }
 
-# derived from config, not hardcoded to "shop", same pattern as detect.py's _QTY_REFERENCE
+# derived from config, not hardcoded to "shop", same pattern as detect.py's _REFERENCE
 _CUSTOMER_FACING = next(s["name"] for s in SOURCES if s.get("customer_facing"))
 
 
-def _customer_facing_claim(conflict):
+def _shop_claim(conflict):
     return next((c for c in conflict.claims if c.source == _CUSTOMER_FACING), None)
 
 
-def _severity_category(conflict, winner):
+def _category(conflict, winner):
     if conflict.type == "coverage":
         return "coverage"
-    claim = _customer_facing_claim(conflict)
+    claim = _shop_claim(conflict)
     if claim is None or claim is winner:
         return "internal"
     if conflict.type == "price":
@@ -56,7 +56,7 @@ def _severity_category(conflict, winner):
     return "overselling" if claim.qty > winner.qty else "underselling"
 
 
-def _dollar_exposure(conflict, winner, claim):
+def _exposure(conflict, winner, claim):
     if conflict.type == "coverage":
         # nothing to difference against: the whole advertised position is unbacked
         qty = max((c.qty or 0) for c in conflict.claims)
@@ -71,20 +71,13 @@ def _dollar_exposure(conflict, winner, claim):
 
 
 def _severity(conflict, winner, category):
-    claim = _customer_facing_claim(conflict) or winner
-    magnitude = min(1.0, _dollar_exposure(conflict, winner, claim) / MAGNITUDE_REFERENCE)
-    return SEVERITY_BASE[category] * (0.8 + 0.4 * magnitude)  # +/-20% within a category, never crosses one
+    claim = _shop_claim(conflict) or winner
+    magnitude = min(1.0, _exposure(conflict, winner, claim) / MAX_EXPOSURE)
+    return SEVERITY[category] * (0.8 + 0.4 * magnitude)  # +/-20% within a category, never crosses one
 
 
 def _priority(severity, confidence, urgency):
-    """severity * urgency, scaled by confidence -- but scaled, not multiplied raw.
-
-    Multiplying impact by a raw confidence term let a near-certain triviality
-    outrank a probably-catastrophic unknown, which is backwards: the whole
-    point of surfacing something to a human is that it's important *and*
-    unsettled. Confidence now only damps priority within [CONFIDENCE_FLOOR, 1],
-    so it breaks ties between comparable items without ever burying a
-    high-severity one."""
+    # scale by confidence within [CONFIDENCE_FLOOR, 1], not multiply it raw
     return severity * urgency * (CONFIDENCE_FLOOR + (1 - CONFIDENCE_FLOOR) * confidence)
 
 
@@ -99,25 +92,16 @@ def _urgency(conflict, category, action_type):
         lead_days = next((c.lead_time_days for c in conflict.claims if c.lead_time_days is not None), None)
         if lead_days is not None:
             return min(1.0, lead_days / 7)  # longer lead time = act now, less room to wait
-    return URGENCY_BASE[category]
+    return URGENCY[category]
 
 
 def build_action(conflict, now, reliability=None, ticks_seen=1):
-    """One resolved conflict -> one Action, or None if it's lag. Type comes
-    from who's wrong (customer-facing source vs a backend-only source) and
-    direction (overselling/underselling); priority = severity * urgency damped
-    by confidence (PLAN.md 4.3).
-
-    Escalation is for conflicts the agent cannot settle, never for conflicts
-    that merely haven't gone away: a reconciliation backlog is unresolved by
-    definition, so escalating on age alone handed the entire queue back to a
-    human within three ticks. Persistence only escalates something the agent
-    was already unconfident about."""
+    """Resolve one conflict and emit an Action with type, priority, and reason."""
     winner, confidence, resolve_reason = resolve(conflict, now, reliability)
     if classify(conflict, winner, now) == "lag":
         return None  # explained by ordinary lag, not actionable
 
-    category = _severity_category(conflict, winner)
+    category = _category(conflict, winner)
     action_type = _action_type(conflict, winner, category)
     severity = _severity(conflict, winner, category)
     urgency = _urgency(conflict, category, action_type)
@@ -132,7 +116,7 @@ def build_action(conflict, now, reliability=None, ticks_seen=1):
         summary = f"unconfident ({confidence:.0%}) and unresolved for {ticks_seen} ticks"
         reason = f"{resolve_reason}, and it is {summary} — a human needs to settle it."
     else:
-        summary = CATEGORY_PHRASE[category]
+        summary = PHRASES[category]
         reason = f"{resolve_reason}. {summary}."
         if ticks_seen >= UNRESOLVED_ESCALATE_TICKS:
             reason += f" Open for {ticks_seen} ticks, but the call itself is not in doubt ({confidence:.0%} margin)."
@@ -153,13 +137,11 @@ def rank_actions(conflicts, now, reliability=None, ticks_seen=None):
     justified action list the whole project is meant to produce (R3).
     ticks_seen maps a conflict fingerprint to how many ticks it has persisted."""
     ticks_seen = ticks_seen or {}
-    actions = [
-        a
-        for a in (
-            build_action(c, now, reliability, ticks_seen.get(fingerprint(c), 1)) for c in conflicts
-        )
-        if a is not None
-    ]
+    actions = []
+    for c in conflicts:
+        a = build_action(c, now, reliability, ticks_seen.get(fingerprint(c), 1))
+        if a is not None:
+            actions.append(a)
     actions.sort(key=lambda a: a.priority, reverse=True)
     return actions
 

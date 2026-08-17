@@ -6,7 +6,7 @@ kept only to contrast against the real resolver (see PLAN.md 4.1-4.3).
 
 from collections import Counter
 
-from .detect import STOCK_ESTIMATE_TOLERANCE, STOCK_GAP_FLOOR, _QTY_REFERENCE
+from .detect import STOCK_ESTIMATE_TOLERANCE, STOCK_GAP_FLOOR, _REFERENCE
 from .models import field_for
 from .sources import SOURCES
 
@@ -27,16 +27,7 @@ def trust(record, field, now, reliability=NEUTRAL_RELIABILITY):
 
 
 def resolve(conflict, now, reliability=None):
-    """Argmax trust across a conflict's claims: winner, confidence, and a
-    human-readable reason. Not majority vote, not a fixed hierarchy -- see
-    README "Why this rule".
-
-    Confidence is the winner's margin *relative* to its own trust
-    ((winner - runner_up) / winner), not the raw gap. Two reasons: a raw gap
-    is unitless and drifts with learned reliability, so the same conflict
-    scored differently on every tick; and a relative margin is directly
-    readable as "the winner beat the field by 60%", which is what the
-    escalation threshold is actually asking about."""
+    """Pick the highest-trust claim; return it with confidence margin and reason."""
     field = field_for(conflict)
 
     def _reliability_for(record):
@@ -65,7 +56,7 @@ def resolve(conflict, now, reliability=None):
     return winner, confidence, reason
 
 
-def _stock_claim_is_lag(reference, claim, now):
+def _is_lag(reference, claim, now):
     window = _SOURCE_BY_NAME[claim.source]["staleness_window_minutes"]
     age_minutes = max((now - claim.last_updated).total_seconds() / 60, 0)
     if claim.reserved is not None:
@@ -88,7 +79,7 @@ def classify(conflict, winner, now):
         return "error"  # a missing reference record is never explained by ordinary lag
 
     if conflict.type == "stock":
-        reference = next((c for c in conflict.claims if c.source == _QTY_REFERENCE), None)
+        reference = next((c for c in conflict.claims if c.source == _REFERENCE), None)
         if reference is None or reference.qty is None:
             return "error"
         # every non-reference claim already failed detect.py's tolerance to become a
@@ -96,9 +87,9 @@ def classify(conflict, winner, now):
         # "error" today — re-checked here rather than assumed, so it stays correct
         # if the tolerances ever change independently
         for c in conflict.claims:
-            if c.source == _QTY_REFERENCE or c.qty is None:
+            if c.source == _REFERENCE or c.qty is None:
                 continue
-            if not _stock_claim_is_lag(reference, c, now):
+            if not _is_lag(reference, c, now):
                 return "error"
         return "lag"
 
@@ -110,8 +101,8 @@ def classify(conflict, winner, now):
             continue
         window = _SOURCE_BY_NAME[c.source]["staleness_window_minutes"]
         age_minutes = max((now - c.last_updated).total_seconds() / 60, 0)
-        saw_the_change_and_kept_the_old_value = c.last_updated > winner.last_updated
-        if saw_the_change_and_kept_the_old_value or age_minutes > window:
+        missed_update = c.last_updated > winner.last_updated
+        if missed_update or age_minutes > window:
             return "error"
     return "lag"
 
