@@ -26,7 +26,7 @@ TIE_BAND = 0.05
 
 # category ordering matches PLAN.md 4.3: coverage > overselling > price > underselling, plus
 # "internal" for conflicts where the customer already sees the correct number and only a backend
-# source disagrees (e.g. a stale supplier feed) — real, but nobody's actually affected yet
+# source disagrees (e.g. a stale supplier feed); real but nobody's actually affected yet
 SEVERITY = {"coverage": 3.5, "overselling": 3.0, "price": 2.0, "underselling": 1.0, "internal": 0.5}
 URGENCY = {"coverage": 1.0, "overselling": 0.8, "price": 0.6, "underselling": 0.5, "internal": 0.3}
 PHRASES = {

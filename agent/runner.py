@@ -22,8 +22,7 @@ REPORT_FILE = REPO_ROOT / "report.json"
 def _now(now_override):
     if now_override:
         return datetime.fromisoformat(now_override.replace("Z", "+00:00"))
-    # fixture data declares as_of, so the demo reads identically no matter what day
-    # it's run; live feeds omit it and get real time for continuous operation (R8)
+    # as_of freezes the clock for reproducibility; live feeds get real time
     return snapshot_as_of() or datetime.now(timezone.utc)
 
 
@@ -32,11 +31,9 @@ def run_tick(now_override=None):
     records = load_all()
     conflicts = detect_all(records)
     data = st.load_state()
-    reliability = data["reliability"]  # frozen snapshot: every conflict this tick is judged
-    # against the same starting reliability, not one drifting as earlier conflicts resolve
+    reliability = data["reliability"]  # frozen for this tick
 
-    # conflicts that were being tracked but are no longer detected have resolved:
-    # drop them so ticks_seen doesn't keep counting if they ever reappear
+    # drop resolved conflicts so ticks_seen resets if they reappear
     live = {st.fingerprint(c) for c in conflicts}
     for fp in set(data["conflicts"]) - live:
         data["conflicts"].pop(fp)
@@ -52,7 +49,6 @@ def run_tick(now_override=None):
 
     actions = rank_actions(conflicts, now, reliability, ticks_seen)
 
-    # reliability updates apply only after this tick's resolutions are all in
     st.update_reliability(data, resolutions)
     st.decay_reliability(data)
     st.save_state(data)
@@ -127,8 +123,7 @@ def main():
         try:
             while True:
                 run_tick(args.now)
-                sys.stdout.flush()  # stdout is block-buffered when not a tty (e.g. piped to a
-                # log file), so without this a live-tailed run shows nothing until it exits
+                sys.stdout.flush()  # avoid buffering when piped
                 time.sleep(args.loop)
         except KeyboardInterrupt:
             pass

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .models import Record
 
-REPO_ROOT = Path(__file__).resolve().parent.parent  # anchor data/state paths to repo, not caller's cwd
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _parse_wms(raw):
@@ -22,7 +22,7 @@ def _parse_wms(raw):
 def _parse_shop(raw):
     return {
         "qty": raw.get("available_to_sell"),
-        "reserved": raw.get("reserved", 0),  # missing on one record != "no concept of reservations"
+        "reserved": raw.get("reserved", 0),
         "price": raw.get("listed_price"),
         "last_updated": raw["updated_at"],
     }
@@ -32,7 +32,7 @@ def _parse_supplier(raw):
     return {
         "qty": raw.get("estimated_stock"),
         "price": raw.get("list_price"),
-        "lead_time_days": raw.get("lead_time_days"),  # used for restock urgency in rank.py
+        "lead_time_days": raw.get("lead_time_days"),
         "last_updated": raw["reported_at"],
     }
 
@@ -51,8 +51,7 @@ SOURCES = [
         "domain_authority": {"qty": 0.4, "price": 0.5},
         "staleness_window_minutes": 60,
         "parse": _parse_shop,
-        "customer_facing": True,  # this is what a customer actually sees; rank.py uses it to
-                                   # decide PRICE_ADJUST-vs-ALERT and stock severity, not by name
+        "customer_facing": True,
     },
     {
         "name": "supplier",
@@ -63,8 +62,7 @@ SOURCES = [
     },
 ]
 
-# detect.py keys records by source name; a copy-paste duplicate would silently
-# merge two sources' data instead of erroring, so catch it at import time
+# catch duplicate names at import time
 assert len({s["name"] for s in SOURCES}) == len(SOURCES), "duplicate name in SOURCES"
 
 
@@ -84,13 +82,13 @@ def load_source(config):
         fields = config["parse"](raw)
         records.append(
             Record(
-                sku=raw["sku"],  # required identity field: crash if missing
+                sku=raw["sku"],
                 source=config["name"],
-                qty=fields.get("qty"),  # legitimately optional per source
-                price=fields.get("price"),  # e.g. WMS never reports price
-                last_updated=_parse_timestamp(fields["last_updated"]),  # required
-                reserved=fields.get("reserved"),  # only shop has this
-                lead_time_days=fields.get("lead_time_days"),  # only supplier has this
+                qty=fields.get("qty"),
+                price=fields.get("price"),
+                last_updated=_parse_timestamp(fields["last_updated"]),
+                reserved=fields.get("reserved"),
+                lead_time_days=fields.get("lead_time_days"),
             )
         )
     return records
@@ -104,9 +102,7 @@ def load_all():
 
 
 def snapshot_as_of():
-    """When the fixture data was captured. A frozen snapshot declares its own
-    'now' so the demo stays reproducible instead of decaying as real time moves
-    past it; a live feed omits as_of and the caller falls back to real time."""
+    """When the fixture data was captured. Freezes the clock for reproducibility."""
     stamps = []
     for config in SOURCES:
         with open(REPO_ROOT / config["data_file"]) as f:

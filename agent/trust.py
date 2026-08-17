@@ -72,7 +72,7 @@ def _is_lag(reference, claim, now):
 
 
 def classify(conflict, winner, now):
-    """"lag" (expected, temporary, no action) or "error" (real, actionable) --
+    """"lag" (expected, temporary, no action) or "error" (real, actionable).
     PLAN.md 4.2's rule: age within window + benign direction (+ small enough
     gap, for stock) means lag; anything else is error."""
     if conflict.type == "coverage":

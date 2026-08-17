@@ -6,11 +6,11 @@ behind that. Roughly ordered by how much they'd matter beyond a demo.
 
 | # | Issue | Where |
 |---|-------|-------|
-| 1 | Reliability learning relies on corroboration as a proxy for truth | `state.py:85` |
-| 2 | `state.json` has no concurrency protection | `state.py:41` |
+| 1 | Reliability learning relies on corroboration as a proxy for truth | `state.py` `update_reliability()` |
+| 2 | `state.json` read-modify-write has no lock (writes are atomic) | `state.py` `load_state()`, `save_state()` |
 | 3 | Two whole audit lenses never ran | — |
-| 4 | Every threshold is hand-asserted, none derived | `detect.py:6-8`, `rank.py:20-28`, `state.py:18-19` |
-| 5 | `--loop` against fixtures ticks a frozen clock | `runner.py:_now` |
+| 4 | Most thresholds are hand-asserted; one is derived | `rank.py`, `state.py` module constants |
+| 5 | `--loop` against fixtures ticks a frozen clock | `runner.py` |
 
 ---
 
@@ -24,12 +24,14 @@ That's the hook where a real feedback system would plug in: replace the
 corroboration test in `update_reliability` with a call to an oracle. For now,
 corroboration is the strongest signal available without one.
 
-**2. No concurrency protection on `state.json`.** Two agent instances running
-at once will silently clobber each other: read-modify-write with no locking,
-last writer wins. This isn't theoretical — a stray `--loop` process left
-running during testing quietly rewrote state under every verification run for
-an hour and produced convincing but wrong output before it was spotted. Needs
-file locking or an atomic write-and-rename at minimum.
+**2. `state.json` read-modify-write has no lock.** Writes are atomic (temp file + `os.replace`),
+so a reader can never see a half-written file and a crash mid-write can't
+corrupt it. What's still unprotected is the read-modify-write cycle: two
+agents ticking at once both load, both decide, and the second save silently
+discards the first's updates. Not theoretical — a stray `--loop` process left
+running during testing rewrote state under every verification run for an hour
+and produced convincing but wrong output before it was spotted. Needs a lock
+file or a single-writer guarantee.
 
 **3. Two audit lenses never ran.** A three-lens automated audit (correctness /
 completeness / cleanliness) was started; only cleanliness finished — the rest
@@ -39,14 +41,17 @@ have had no systematic sweep** beyond manual testing. That's the most likely
 place an unknown bug is still hiding. Re-running that audit is the single
 highest-value thing left.
 
-**4. Thresholds are asserted, not derived.** `STOCK_GAP_FLOOR = 5`,
-`CONFIDENCE_THRESHOLD = 0.03`, `SEVERITY_BASE`, the `domain_authority` weights,
-the learning/decay rates — all hand-picked to produce sensible behaviour on ten
-SKUs. The *relative ordering* is defensible and argued in the README; the
-absolute numbers aren't fitted to anything. On real data they'd need tuning
-against actual outcomes. Worth knowing SKU-120's escalate-vs-act verdict has
-the thinnest margin in the dataset (confidence 0.0167 vs a 0.03 threshold), so
-it's the first result that would flip if the freshness curve changed.
+**4. Most thresholds are hand-asserted; one is derived.** Hand-picked to produce
+sensible behaviour on ten SKUs: `STOCK_GAP_FLOOR`, `PRICE_SPREAD_THRESHOLD`,
+`CONFIDENCE_THRESHOLD`, `PERSISTENCE_CONFIDENCE`, `CONFIDENCE_FLOOR`, `TIE_BAND`,
+`SEVERITY` and `URGENCY` weights, the `domain_authority` map. The *relative
+ordering* is argued in the README; the absolute numbers aren't fitted to anything.
+
+One exception: `RELIABILITY_DECAY_RATE` is derived, not guessed. It must exceed
+`RELIABILITY_LEARNING_RATE / 0.5 = 0.10`, or decay can never balance learning
+and scores run to the 0.0/1.0 rails. The original 0.02 was below that floor,
+which is exactly what happened: supplier reliability crashed to 0.010 within
+seven ticks. Now set to 0.12, the agent's learned scores stay mid-range.
 
 **5. `--loop` against fixtures ticks a frozen clock.** Fixture files declare an
 `as_of` timestamp and the agent reasons as of that moment (this is what keeps
