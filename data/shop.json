@@ -1,0 +1,16 @@
+{
+  "source": "shop",
+  "as_of": "2026-08-16T10:00:00Z",
+  "records": [
+    {"sku": "SKU-100", "available_to_sell": 118, "reserved": 2, "listed_price": 19.99, "updated_at": "2026-08-16T09:40:00Z"},
+    {"sku": "SKU-104", "available_to_sell": 80, "reserved": 0, "listed_price": 24.99, "updated_at": "2026-08-16T07:30:00Z"},
+    {"sku": "SKU-105", "available_to_sell": 194, "reserved": 6, "listed_price": 14.50, "updated_at": "2026-08-16T09:45:00Z"},
+    {"sku": "SKU-110", "available_to_sell": 60, "reserved": 0, "listed_price": 22.00, "updated_at": "2026-08-16T09:50:00Z"},
+    {"sku": "SKU-120", "available_to_sell": 295, "reserved": 0, "listed_price": 27.50, "updated_at": "2026-08-16T08:30:00Z"},
+    {"sku": "SKU-130", "available_to_sell": 42, "reserved": 0, "listed_price": 89.99, "updated_at": "2026-08-16T09:45:00Z"},
+    {"sku": "SKU-140", "available_to_sell": 95, "reserved": 5, "listed_price": 15.25, "updated_at": "2026-08-16T09:20:00Z"},
+    {"sku": "SKU-205", "available_to_sell": 88, "reserved": 2, "listed_price": 42.00, "updated_at": "2026-08-16T09:20:00Z"},
+    {"sku": "SKU-210", "available_to_sell": 74, "reserved": 1, "listed_price": 32.50, "updated_at": "2026-08-16T09:35:00Z"},
+    {"sku": "SKU-215", "available_to_sell": 53, "reserved": 1, "listed_price": 63.50, "updated_at": "2026-08-16T09:40:00Z"}
+  ]
+}

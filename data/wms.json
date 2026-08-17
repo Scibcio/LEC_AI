@@ -1,0 +1,16 @@
+{
+  "source": "wms",
+  "as_of": "2026-08-16T10:00:00Z",
+  "records": [
+    {"sku": "SKU-100", "on_hand_qty": 120, "last_synced": "2026-08-16T09:58:00Z"},
+    {"sku": "SKU-104", "on_hand_qty": 50, "last_synced": "2026-08-16T09:58:00Z"},
+    {"sku": "SKU-105", "on_hand_qty": 200, "last_synced": "2026-08-16T09:55:00Z"},
+    {"sku": "SKU-110", "on_hand_qty": 45, "last_synced": "2026-08-16T05:00:00Z"},
+    {"sku": "SKU-120", "on_hand_qty": 310, "last_synced": "2026-08-16T09:15:00Z"},
+    {"sku": "SKU-130", "on_hand_qty": 8, "last_synced": "2026-08-16T09:59:00Z"},
+    {"sku": "SKU-140", "on_hand_qty": 150, "last_synced": "2026-08-16T09:56:00Z"},
+    {"sku": "SKU-205", "on_hand_qty": 90, "last_synced": "2026-08-16T09:55:00Z"},
+    {"sku": "SKU-210", "on_hand_qty": 75, "last_synced": "2026-08-16T09:57:00Z"},
+    {"sku": "SKU-215", "on_hand_qty": 54, "last_synced": "2026-08-16T09:58:00Z"}
+  ]
+}
