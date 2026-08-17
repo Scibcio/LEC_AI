@@ -7,6 +7,7 @@ kept only to contrast against the real resolver (see PLAN.md 4.1-4.3).
 from collections import Counter
 
 from .detect import STOCK_ESTIMATE_TOLERANCE, STOCK_GAP_FLOOR, _QTY_REFERENCE
+from .models import field_for
 from .sources import SOURCES
 
 NEUTRAL_RELIABILITY = 0.5  # default when no learned score exists yet (new source, or no state passed in)
@@ -26,10 +27,17 @@ def trust(record, field, now, reliability=NEUTRAL_RELIABILITY):
 
 
 def resolve(conflict, now, reliability=None):
-    """Argmax trust across a conflict's claims: winner, confidence (trust gap
-    to the runner-up), and a human-readable reason. Not majority vote, not a
-    fixed hierarchy -- see README "Why this rule"."""
-    field = "qty" if conflict.type == "stock" else "price"
+    """Argmax trust across a conflict's claims: winner, confidence, and a
+    human-readable reason. Not majority vote, not a fixed hierarchy -- see
+    README "Why this rule".
+
+    Confidence is the winner's margin *relative* to its own trust
+    ((winner - runner_up) / winner), not the raw gap. Two reasons: a raw gap
+    is unitless and drifts with learned reliability, so the same conflict
+    scored differently on every tick; and a relative margin is directly
+    readable as "the winner beat the field by 60%", which is what the
+    escalation threshold is actually asking about."""
+    field = field_for(conflict)
 
     def _reliability_for(record):
         # state.py's learned per-source-per-field score. Falls back to neutral for a
@@ -46,7 +54,12 @@ def resolve(conflict, now, reliability=None):
     )
     winner, winner_trust = scored[0]
     runner_up, runner_up_trust = scored[1] if len(scored) > 1 else (None, 0.0)
-    confidence = winner_trust - runner_up_trust
+    # relative margin in [0, 1]; a winner with zero trust has nothing to be confident about.
+    # Single uncorroborated claims have confidence 0.0: no competing evidence
+    if len(scored) == 1:
+        confidence = 0.0
+    else:
+        confidence = (winner_trust - runner_up_trust) / winner_trust if winner_trust > 0 else 0.0
     runner_up_desc = f"{runner_up.source} ({runner_up_trust:.2f})" if runner_up else "no other claim"
     reason = f"trusted {winner.source} ({winner_trust:.2f}) on {field} over {runner_up_desc}"
     return winner, confidence, reason
@@ -71,6 +84,9 @@ def classify(conflict, winner, now):
     """"lag" (expected, temporary, no action) or "error" (real, actionable) --
     PLAN.md 4.2's rule: age within window + benign direction (+ small enough
     gap, for stock) means lag; anything else is error."""
+    if conflict.type == "coverage":
+        return "error"  # a missing reference record is never explained by ordinary lag
+
     if conflict.type == "stock":
         reference = next((c for c in conflict.claims if c.source == _QTY_REFERENCE), None)
         if reference is None or reference.qty is None:
@@ -101,6 +117,6 @@ def classify(conflict, winner, now):
 
 
 def majority_vote(conflict):
-    field = "qty" if conflict.type == "stock" else "price"
+    field = field_for(conflict)
     values = [getattr(c, field) for c in conflict.claims if getattr(c, field) is not None]
     return Counter(values).most_common(1)[0][0]  # ties broken by first-seen order, deterministic

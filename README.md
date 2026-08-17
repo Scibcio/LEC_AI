@@ -31,13 +31,14 @@ learned_reliability`, computed per source, per field — not majority vote,
 not "always trust WMS."
 
 **Not majority vote:** in SKU-104, shop and supplier both claim 80 units
-while WMS says 50. Two sources agreeing looks like evidence, but they agree
-because they're both reading a stale copy of the same reality, not because
-they independently verified anything. WMS's number is fresher, and WMS is
-the only source that physically counts stock — the agent trusts it, one
-against two. Naive majority vote would side with the crowd and miss the
-overselling risk (`python -m agent.runner --explain SKU-104` shows this
-directly: naive majority says 80, the agent trusts 50).
+while WMS says 50. Two sources agreeing looks like evidence, but they're both
+reading a stale copy of the same reality, not two independent verifications.
+WMS is the only source that physically counts stock — it's the warehouse
+system, the reference authority for quantity. The other two are reading
+a shared upstream. One observation from two sources is still one observation.
+The agent trusts WMS, one against two. Naive majority vote would side with
+the crowd and miss the overselling risk (`python -m agent.runner --explain
+SKU-104` shows this directly: naive majority says 80, the agent trusts 50).
 
 **Not a fixed hierarchy:** in SKU-110, WMS hasn't synced in 5 hours while
 shop and supplier independently agree on a fresh number. Here the agent
@@ -79,7 +80,7 @@ against the reasoning core directly.
 | SKU-105 | Stock | CLEAN    | Shop 194 + 6 reserved = 200, matches WMS exactly           | No action                                   |
 | SKU-110 | Stock | ERROR    | WMS stale 5h; shop/supplier agree ~60                      | Trust shop/supplier — ALERT (resync WMS)    |
 | SKU-120 | Stock | ESCALATE | 310 / 295 / 320, no clear winner                           | ESCALATE_HUMAN                              |
-| SKU-130 | Stock | ERROR    | Shop offers 42; WMS/supplier show ~8-12                    | Trust WMS/supplier — ALERT (top severity)   |
+| SKU-130 | Stock | ERROR    | Shop offers 42; WMS/supplier show ~8-12                    | Trust WMS/supplier — RESTOCK (top severity) |
 | SKU-140 | Stock | ERROR    | Shop 95 + 5 reserved = 100; WMS/supplier ~150, 50 short    | Trust WMS/supplier — ALERT (low severity)   |
 | SKU-205 | Price | LAG      | Supplier changed price 09:50; shop synced 09:20            | No action yet                               |
 | SKU-210 | Price | ERROR    | Supplier changed price 09:00; shop synced 09:35, still old | Trust supplier — PRICE_ADJUST               |
@@ -95,4 +96,6 @@ Confidence numbers aren't shown in the table above — run
 `python -m agent.runner --explain <SKU>` for the real per-source trust
 breakdown behind any of these verdicts. All ten match what the running
 agent actually produces (`python -m agent.runner --once` reproduces this
-exact table against `data/*.json`).
+exact table against `data/*.json`). Priority numbers quoted in the worked
+example assume fresh state (before learning drift); run `python -m
+agent.runner --reset && python -m agent.runner --once` to match them.

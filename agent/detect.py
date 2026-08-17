@@ -19,12 +19,28 @@ def _group_by_sku(records):
     return by_sku
 
 
+def detect_coverage_gaps(records):
+    """The reference source has no usable qty for a sku that other sources are
+    actively reporting. Previously this was skipped silently, which meant "the
+    warehouse has never heard of a product the shop is selling" produced no
+    output at all -- the most expensive alarm in an inventory system, muted."""
+    conflicts = []
+    for sku, claims in _group_by_sku(records).items():
+        reference = next((r for r in claims if r.source == _QTY_REFERENCE), None)
+        if reference is not None and reference.qty is not None:
+            continue  # reference covers this sku; ordinary stock comparison applies
+        if not any(r.qty is not None for r in claims):
+            continue  # nobody reports stock for this sku at all -- not a coverage gap
+        conflicts.append(Conflict(sku=sku, type="coverage", claims=claims))
+    return conflicts
+
+
 def detect_stock_mismatches(records):
     conflicts = []
     for sku, claims in _group_by_sku(records).items():
         reference = next((r for r in claims if r.source == _QTY_REFERENCE), None)
         if reference is None or reference.qty is None:
-            continue  # nothing to compare this sku's stock against
+            continue  # no reference to compare against -- detect_coverage_gaps owns this case
         flagged = False
         for r in claims:
             if r.source == _QTY_REFERENCE or r.qty is None:
@@ -73,4 +89,4 @@ def detect_price_divergence(records):
 
 
 def detect_all(records):
-    return detect_stock_mismatches(records) + detect_price_divergence(records)
+    return detect_coverage_gaps(records) + detect_stock_mismatches(records) + detect_price_divergence(records)

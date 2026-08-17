@@ -6,24 +6,23 @@ behind that. Roughly ordered by how much they'd matter beyond a demo.
 
 | # | Issue | Where |
 |---|-------|-------|
-| 1 | Reliability learning has no ground truth — it's circular | `state.py:73` |
+| 1 | Reliability learning relies on corroboration as a proxy for truth | `state.py:85` |
 | 2 | `state.json` has no concurrency protection | `state.py:41` |
 | 3 | Two whole audit lenses never ran | — |
 | 4 | Every threshold is hand-asserted, none derived | `detect.py:6-8`, `rank.py:20-28`, `state.py:18-19` |
-| 5 | `resolve()`/`classify()` computed twice per conflict per tick | `runner.py:46`, `rank.py:89` |
-| 6 | `--loop` against fixtures ticks a frozen clock | `runner.py:_now` |
+| 5 | `--loop` against fixtures ticks a frozen clock | `runner.py:_now` |
 
 ---
 
-**1. Reliability learning is circular.** `update_reliability` rewards whichever
-source the trust formula already picked as winner, and penalises the losers.
-So the agent is scoring sources against *its own prior belief*, not against
-what was actually true. A source the formula is systematically biased toward
-gets its reliability pushed up, which biases the formula further. It can't
-self-correct, and on the demo data it happens to reinforce the right answers,
-which hides the problem. Fixing it properly needs an external feedback channel
-— a human (or a later physical count) confirming who was actually right — and
-then scoring against *that*. Currently nothing supplies it.
+**1. Reliability learning has no ground truth.** `update_reliability` learns
+only from conflicts where an independent second source corroborates the winner
+— a strong proxy for correctness, but still a proxy. It cannot catch two
+sources wrong the same way (e.g. both reading a shared upstream that's
+systematically biased). Fixing it properly needs an external feedback channel
+— a human confirmation or a physical count — to score against actual truth.
+That's the hook where a real feedback system would plug in: replace the
+corroboration test in `update_reliability` with a call to an oracle. For now,
+corroboration is the strongest signal available without one.
 
 **2. No concurrency protection on `state.json`.** Two agent instances running
 at once will silently clobber each other: read-modify-write with no locking,
@@ -49,16 +48,7 @@ against actual outcomes. Worth knowing SKU-120's escalate-vs-act verdict has
 the thinnest margin in the dataset (confidence 0.0167 vs a 0.03 threshold), so
 it's the first result that would flip if the freshness curve changed.
 
-**5. Redundant resolve/classify.** Each conflict is resolved and classified
-twice per tick — once in `run_tick`'s loop for the state update, then again
-inside `build_action`. Pure functions, same inputs, so the results are
-identical; it's wasted work, not a bug. Deliberately left alone: fixing it
-means reshaping `rank_actions`/`build_action` signatures and the runner wiring,
-which wasn't worth the risk against ~30 extra calls on a 10-SKU demo. It is a
-mild drift hazard though — the two call sites must keep passing the same
-`reliability`, and nothing enforces that.
-
-**6. `--loop` against fixtures ticks a frozen clock.** Fixture files declare an
+**5. `--loop` against fixtures ticks a frozen clock.** Fixture files declare an
 `as_of` timestamp and the agent reasons as of that moment (this is what keeps
 the demo reproducible — see README). Under `--loop` that means record *ages*
 never advance; only reliability and `ticks_seen` evolve between ticks. So the

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from . import state as st
 from .detect import detect_all
+from .models import field_for
 from .rank import explain_ranking, print_console_table, rank_actions, to_json
 from .sources import REPO_ROOT, load_all, snapshot_as_of
 from .trust import NEUTRAL_RELIABILITY, classify, freshness, majority_vote, resolve, trust
@@ -52,8 +53,7 @@ def run_tick(now_override=None):
     actions = rank_actions(conflicts, now, reliability, ticks_seen)
 
     # reliability updates apply only after this tick's resolutions are all in
-    for conflict, winner, verdict in resolutions:
-        st.update_reliability(data, conflict, winner, verdict)
+    st.update_reliability(data, resolutions)
     st.decay_reliability(data)
     st.save_state(data)
 
@@ -76,7 +76,7 @@ def explain_sku(sku, now_override=None):
         return
 
     data = st.load_state()
-    field = "qty" if conflict.type == "stock" else "price"
+    field = field_for(conflict)
 
     print(f"{sku} ({conflict.type} conflict, comparing '{field}')")
     print(f"{'source':<10} {'qty':>6} {'price':>8} {'age(min)':>9} {'fresh':>6} {'trust':>6}")

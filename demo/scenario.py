@@ -49,8 +49,7 @@ def run_tick(title, now, records, state):
         st.record_conflict(state, c, now)
 
     actions = rank_actions(conflicts, now, state["reliability"])
-    for c, winner, verdict in resolutions:
-        st.update_reliability(state, c, winner, verdict)
+    st.update_reliability(state, resolutions)
     st.decay_reliability(state)
 
     if actions:
@@ -121,7 +120,7 @@ def tick_5(state):
         c = conflicts[0]
         winner, _, _ = resolve(c, now, state["reliability"])
         verdict = classify(c, winner, now)
-        st.update_reliability(state, c, winner, verdict)
+        st.update_reliability(state, [(c, winner, verdict)])
         st.decay_reliability(state)
         print(f"round {i + 1}: winner={winner.source}, supplier qty reliability now "
               f"{state['reliability']['supplier']['qty']:.3f}")

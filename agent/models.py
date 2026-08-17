@@ -17,14 +17,23 @@ class Record:
 @dataclass(frozen=True)
 class Conflict:
     sku: str
-    type: str  # "stock" or "price"
+    type: str  # "stock", "price", or "coverage" (reference source has no record at all)
     claims: list  # every Record involved, however many sources reported one
+
+
+def field_for(conflict):
+    """Which Record field this conflict is actually about. Single definition so
+    the resolver, the learner and the ranker can't drift apart on it."""
+    return "price" if conflict.type == "price" else "qty"
 
 
 @dataclass(frozen=True)
 class Action:
     sku: str
     type: str  # RESTOCK, PRICE_ADJUST, ALERT, or ESCALATE_HUMAN
-    priority: float  # severity * confidence * urgency
-    category: str  # "overselling", "underselling", "price", or "internal" (drives severity/urgency)
+    priority: float  # severity * urgency, damped by confidence
+    category: str  # "coverage", "overselling", "underselling", "price", or "internal"
     reason: str
+    confidence: float = 0.0  # resolver's relative margin, reported alongside priority, not folded into it
+    summary: str = ""  # short phrase matching the FINAL action type; what other rows quote when
+    # they compare themselves to this one, so a comparison can never contradict the row it cites
