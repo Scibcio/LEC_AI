@@ -1,8 +1,0 @@
-__pycache__/
-*.py[cod]
-venv/
-.venv/
-state.json
-report.json
-.DS_Store
-.claude
