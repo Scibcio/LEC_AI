@@ -84,7 +84,7 @@ def classify(conflict, winner, now):
             return "error"
         # every non-reference claim already failed detect.py's tolerance to become a
         # Conflict in the first place, so this loop is expected to always land on
-        # "error" today — re-checked here rather than assumed, so it stays correct
+        # "error" today, re-checked here rather than assumed, so it stays correct
         # if the tolerances ever change independently
         for c in conflict.claims:
             if c.source == _REFERENCE or c.qty is None:

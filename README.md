@@ -97,7 +97,37 @@ Confidence numbers aren't shown in the table above — run
 breakdown behind any of these verdicts. All ten match what the running
 agent actually produces (`python -m agent.runner --once` reproduces this
 exact table against `data/*.json`). Priority numbers quoted in the worked
-example assume fresh state (before learning drift); run `python -m
-agent.runner --reset && python -m agent.runner --once` to match them.
-Priorities below are from a fresh run — they rise ~8% over the first dozen
-ticks as reliability settles, then hold.
+example assume fresh state — run `python -m agent.runner --reset && python -m
+agent.runner --once` to match them. They rise ~8% over the first dozen ticks
+as reliability settles, then hold.
+
+## What I'd do next with more time
+
+**Replace corroboration with real ground truth.** Reliability currently learns
+only from conflicts where an independent source agrees with the winner. That's
+a proxy — it can't catch two sources wrong the same way, e.g. both reading a
+shared upstream. The fix is a feedback channel: a human confirming a
+resolution, or a physical stock count, scored against instead. The hook is the
+corroboration test in `update_reliability`; swapping it for an oracle call is a
+small change to a function that was written expecting it.
+
+**Fit the thresholds to data instead of asserting them.** `STOCK_GAP_FLOOR`,
+`CONFIDENCE_THRESHOLD` and the domain-authority weights are hand-picked to
+behave sensibly on ten SKUs. Their relative ordering is defensible and argued
+above; the absolute numbers aren't fitted to anything. With real outcome data
+they'd be tuned against actual resolution accuracy.
+
+**Lock `state.json`.** Writes are atomic, but the read-modify-write cycle
+isn't. Two agents ticking at once both load, both decide, and the second save
+discards the first's updates. A lock file or a single-writer guarantee closes it.
+
+**Make freshness comparable across sources.** `freshness` is capped at 1.0, so
+everything inside its own staleness window scores identically — a 12-hour-old
+supplier record and a 2-minute-old WMS record are both "fresh". That's
+deliberate (windows differ hugely per source) but it means freshness only ever
+penalises, never rewards. Worth revisiting with real sync-rate data.
+
+**Source health as a first-class signal.** A WMS that hasn't synced in five
+hours is currently scored as "nobody's affected yet" and ranks low. In a real
+deployment that's a leading indicator and probably deserves its own alert
+track, separate from per-SKU reconciliation.

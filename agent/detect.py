@@ -48,6 +48,7 @@ def detect_stock_mismatches(records):
                     flagged = True
                     break
             else:
+                # relative tolerance is undefined at 0, fall back to the flat floor
                 if reference.qty == 0:
                     mismatch = abs(r.qty) > STOCK_GAP_FLOOR
                 else:
